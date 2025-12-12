@@ -9,6 +9,7 @@ def get_db():
     db = getattr(g, '_database', None)
     if db is None:
         db = g._database = sqlite3.connect(DATABASE)
+        # Use sqlite3.Row for dictionary-like access to rows
         db.row_factory = sqlite3.Row 
     return db
 
@@ -30,12 +31,12 @@ def dashboard_data():
     selected_month = request.args.get('month', 'Overall')
 
     # --- FILTERS ---
-    # Filter A: Time Only (For Charts)
+    # Filter A: Time Only (For Pie/Line Charts when not overall shop)
     time_conditions = []
     time_params = []
     if selected_month != 'Overall':
-        # Handles dates like '2023-01-01' or '01/01/2023' roughly
-        time_conditions.append("CAST(strftime('%m', transaction_date) AS INTEGER) = ?")
+        # FIX: Use REPLACE to format date for SQLite strftime
+        time_conditions.append("CAST(strftime('%m', REPLACE(transaction_date, '/', '-')) AS INTEGER) = ?")
         time_params.append(selected_month)
     time_where = "WHERE " + " AND ".join(time_conditions) if time_conditions else ""
 
@@ -47,50 +48,146 @@ def dashboard_data():
         strict_params.append(selected_shop)
     strict_where = "WHERE " + " AND ".join(strict_conditions) if strict_conditions else ""
 
-    # --- 1. PIE CHART DATA (Safe Handling) ---
-    sql_pie = f"""
-        SELECT store_location, 
-               SUM(unit_price * transaction_qty) as total_sales, 
-               SUM(transaction_qty) as total_qty
-        FROM transactions
-        {time_where}
-        GROUP BY store_location
-    """
-    pie_rows = db.execute(sql_pie, time_params).fetchall()
+    # --- 1. PIE / HEATMAP DATA ---
     
-    # SAFETY FIX: Convert None to 0
-    pie_labels = []
-    pie_sales = []
-    pie_qty = []
-    
-    for row in pie_rows:
-        pie_labels.append(row['store_location'] if row['store_location'] else 'Unknown')
-        pie_sales.append(row['total_sales'] if row['total_sales'] is not None else 0)
-        pie_qty.append(row['total_qty'] if row['total_qty'] is not None else 0)
+    heatmap_data = None
+    if selected_shop != 'Overall':
+        # Condition: Specific shop selected -> get data for heatmap (Transaction Count)
+        
+        # FIX: Use REPLACE to format date for SQLite strftime
+        sql_heatmap = f"""
+            SELECT CAST(strftime('%w', REPLACE(transaction_date, '/', '-')) AS INTEGER) AS day_of_week, 
+                   CAST(strftime('%H', transaction_time) AS INTEGER) AS hour_of_day,
+                   COUNT(transaction_id) AS total_transactions
+            FROM transactions
+            {strict_where}
+            GROUP BY day_of_week, hour_of_day
+            HAVING hour_of_day >= 6 AND hour_of_day <= 20 -- Assuming 6 AM to 8 PM operating hours
+            ORDER BY day_of_week, hour_of_day
+        """
+        heatmap_rows = db.execute(sql_heatmap, strict_params).fetchall()
+        
+        # Data structure for the heatmap frontend
+        transaction_matrix = {}
+        max_transactions = 0
+        
+        for row in heatmap_rows:
+            key = f"{row['day_of_week']}:{row['hour_of_day']}"
+            transactions = row['total_transactions'] if row['total_transactions'] is not None else 0
+            
+            transaction_matrix[key] = transactions
+            max_transactions = max(max_transactions, transactions)
+
+        heatmap_data = {
+            'transaction_matrix': transaction_matrix,
+            'max_transactions': max_transactions
+        }
+        
+        pie_labels = []
+        pie_sales = []
+        pie_qty = []
+        
+    else:
+        # Condition: Overall shop selected -> use original pie chart logic
+        sql_pie = f"""
+            SELECT store_location, 
+                   SUM(unit_price * transaction_qty) as total_sales, 
+                   SUM(transaction_qty) as total_qty
+            FROM transactions
+            {time_where}
+            GROUP BY store_location
+        """
+        pie_rows = db.execute(sql_pie, time_params).fetchall()
+        
+        pie_labels = []
+        pie_sales = []
+        pie_qty = []
+        
+        for row in pie_rows:
+            pie_labels.append(row['store_location'] if row['store_location'] else 'Unknown')
+            pie_sales.append(row['total_sales'] if row['total_sales'] is not None else 0)
+            pie_qty.append(row['total_qty'] if row['total_qty'] is not None else 0)
+
 
     # --- 2. LINE CHART DATA ---
-    sql_line = f"""
-        SELECT transaction_date, store_location, SUM(unit_price * transaction_qty) as daily_sales
-        FROM transactions
-        {time_where}
-        GROUP BY transaction_date, store_location
-        ORDER BY transaction_date
-    """
-    line_rows = db.execute(sql_line, time_params).fetchall()
-    
-    all_dates = sorted(list(set(r['transaction_date'] for r in line_rows)))
     store_names = ['Astoria', 'Lower Manhattan', "Hell's Kitchen"]
-    store_data_map = {name: [0] * len(all_dates) for name in store_names}
     
-    for row in line_rows:
-        if row['transaction_date'] in all_dates:
-            d_idx = all_dates.index(row['transaction_date'])
+    if selected_month == 'Overall':
+        # Use monthly aggregation 
+        # FIX: Use REPLACE to format date for SQLite strftime
+        sql_line = f"""
+            SELECT CAST(strftime('%m', REPLACE(transaction_date, '/', '-')) AS INTEGER) AS month, 
+                   store_location, 
+                   SUM(unit_price * transaction_qty) as monthly_sales,
+                   SUM(transaction_qty) as monthly_qty
+            FROM transactions
+            GROUP BY month, store_location
+            ORDER BY month
+        """
+        line_rows = db.execute(sql_line).fetchall()
+        
+        all_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+        
+        store_sales_map = {name: [0] * 6 for name in store_names}
+        store_qty_map = {name: [0] * 6 for name in store_names}
+        
+        for row in line_rows:
+            month_idx = row['month'] - 1 
             s_name = row['store_location']
-            val = row['daily_sales'] if row['daily_sales'] is not None else 0
-            if s_name in store_data_map:
-                store_data_map[s_name][d_idx] = val
+            monthly_sales = row['monthly_sales'] if row['monthly_sales'] is not None else 0
+            monthly_qty = row['monthly_qty'] if row['monthly_qty'] is not None else 0
+            
+            if 0 <= month_idx < 6 and s_name in store_names:
+                store_sales_map[s_name][month_idx] = monthly_sales
+                store_qty_map[s_name][month_idx] = monthly_qty
+        
+    else:
+        # Use weekly aggregation for specific month (Weeks 1-4)
+        # FIX: Use REPLACE to format date for SQLite strftime
+        sql_line = f"""
+            SELECT CASE
+                       WHEN CAST(strftime('%d', REPLACE(transaction_date, '/', '-')) AS INTEGER) BETWEEN 1 AND 7 THEN 1
+                       WHEN CAST(strftime('%d', REPLACE(transaction_date, '/', '-')) AS INTEGER) BETWEEN 8 AND 14 THEN 2
+                       WHEN CAST(strftime('%d', REPLACE(transaction_date, '/', '-')) AS INTEGER) BETWEEN 15 AND 21 THEN 3
+                       ELSE 4 -- Days 22 through 31 are all grouped into Week 4
+                   END AS week_of_month,
+                   store_location, 
+                   SUM(unit_price * transaction_qty) as weekly_sales,
+                   SUM(transaction_qty) as weekly_qty
+            FROM transactions
+            {time_where}
+            GROUP BY week_of_month, store_location
+            ORDER BY week_of_month
+        """
+        line_rows = db.execute(sql_line, time_params).fetchall()
+        
+        all_labels = ["Week 1", "Week 2", "Week 3", "Week 4"]
+        
+        store_sales_map = {name: [0] * 4 for name in store_names}
+        store_qty_map = {name: [0] * 4 for name in store_names}
+        
+        for row in line_rows:
+            week_idx = row['week_of_month'] - 1 # Week 1 is index 0
+            s_name = row['store_location']
+            weekly_sales = row['weekly_sales'] if row['weekly_sales'] is not None else 0
+            weekly_qty = row['weekly_qty'] if row['weekly_qty'] is not None else 0
+            
+            if 0 <= week_idx < 4 and s_name in store_sales_map: 
+                store_sales_map[s_name][week_idx] = weekly_sales
+                store_qty_map[s_name][week_idx] = weekly_qty 
 
-    # --- 3. TABLE DATA ---
+    # Prepare datasets for BOTH Sales and Quantity line charts
+    line_datasets_sales = [
+        {'label': s, 'data': d, 'borderColor': c} 
+        for s, d, c in zip(store_names, store_sales_map.values(), ['#FF6384', '#36A2EB', '#FFCE56'])
+    ]
+    
+    line_datasets_qty = [
+        {'label': s, 'data': d, 'borderColor': c} 
+        for s, d, c in zip(store_names, store_qty_map.values(), ['#27ae60', '#9b59b6', '#f39c12']) 
+    ]
+
+    # --- 3. TABLE DATA (No Change) ---
     sql_table = f"""
         SELECT product_category, 
                SUM(transaction_qty) as total_qty,
@@ -119,7 +216,7 @@ def dashboard_data():
             'percent_qty': (qty / grand_total_qty) * 100
         })
 
-    # --- 4. METRICS ---
+    # --- 4. METRICS (No Change) ---
     sql_total = f"SELECT SUM(unit_price * transaction_qty) as rev FROM transactions {strict_where}"
     total_rev = db.execute(sql_total, strict_params).fetchone()['rev']
     total_rev = total_rev if total_rev is not None else 0
@@ -132,12 +229,11 @@ def dashboard_data():
             'qty': pie_qty
         },
         'line_data': {
-            'dates': all_dates,
-            'datasets': [
-                {'label': s, 'data': d, 'borderColor': c} 
-                for s, d, c in zip(store_names, store_data_map.values(), ['#FF6384', '#36A2EB', '#FFCE56'])
-            ]
+            'dates': all_labels, 
+            'sales_datasets': line_datasets_sales, 
+            'qty_datasets': line_datasets_qty      
         },
+        'heatmap_data': heatmap_data, 
         'table_data': table_data
     })
 
