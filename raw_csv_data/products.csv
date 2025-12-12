@@ -1,0 +1,81 @@
+product_id,product_detail,product_type_id
+1,Brazilian - Organic,21
+2,Our Old Time Diner Blend,19
+3,Espresso Roast,12
+4,Primo Espresso Roast,12
+5,Columbian Medium Roast,13
+6,Ethiopia,13
+7,Jamacian Coffee River,25
+8,Civet Cat,25
+9,Organic Decaf Blend,21
+10,Guatemalan Sustainably Grown,15
+11,Lemon Grass,17
+12,Peppermint,17
+13,English Breakfast,3
+14,Earl Grey,3
+15,Serenity Green Tea,16
+16,Traditional Blend Chai,8
+17,Morning Sunrise Chai,8
+18,Spicy Eye Opener Chai,8
+19,Dark chocolate,10
+20,Sustainably Grown Organic,22
+21,Chili Mayan,10
+22,Our Old Time Diner Blend Sm,11
+23,Our Old Time Diner Blend Rg,11
+24,Our Old Time Diner Blend Lg,11
+25,Brazilian Sm,23
+26,Brazilian Rg,23
+27,Brazilian Lg,23
+28,Columbian Medium Roast Sm,14
+29,Columbian Medium Roast Rg,14
+30,Columbian Medium Roast Lg,14
+31,Ethiopia Sm,14
+32,Ethiopia Rg,14
+33,Ethiopia Lg,14
+34,Jamaican Coffee River Sm,26
+35,Jamaican Coffee River Rg,26
+36,Jamaican Coffee River Lg,26
+37,Espresso shot,1
+38,Latte,1
+39,Latte Rg,1
+40,Cappuccino,1
+41,Cappuccino Lg,1
+42,Lemon Grass Rg,7
+43,Lemon Grass Lg,7
+44,Peppermint Rg,7
+45,Peppermint Lg,7
+46,Serenity Green Tea Rg,6
+47,Serenity Green Tea Lg,6
+48,English Breakfast Rg,4
+49,English Breakfast Lg,4
+50,Earl Grey Rg,4
+51,Earl Grey Lg,4
+52,Traditional Blend Chai Rg,5
+53,Traditional Blend Chai Lg,5
+54,Morning Sunrise Chai Rg,5
+55,Morning Sunrise Chai Lg,5
+56,Spicy Eye Opener Chai Rg,5
+57,Spicy Eye Opener Chai Lg,5
+58,Dark chocolate Rg,18
+59,Dark chocolate Lg,18
+60,Sustainably Grown Organic Rg,18
+61,Sustainably Grown Organic Lg,18
+63,Carmel syrup,27
+64,Hazelnut syrup,27
+65,Sugar Free Vanilla syrup,29
+69,Hazelnut Biscotti,2
+70,Cranberry Scone,28
+71,Chocolate Croissant,24
+72,Ginger Scone,28
+73,Almond Croissant,24
+74,Ginger Biscotti,2
+75,Croissant,24
+76,Chocolate Chip Biscotti,2
+77,Oatmeal Scone,28
+78,Scottish Cream Scone ,28
+79,Jumbo Savory Scone,28
+81,I Need My Bean! T-shirt,9
+82,I Need My Bean! Diner mug,20
+83,I Need My Bean! Latte cup,20
+84,Chocolate syrup,27
+87,Ouro Brasileiro shot,1

@@ -1,0 +1,30 @@
+product_type_id,product_type,product_category
+1,Barista Espresso,Coffee
+2,Biscotti,Bakery
+3,Black tea,Loose Tea
+4,Brewed Black tea,Tea
+5,Brewed Chai tea,Tea
+6,Brewed Green tea,Tea
+7,Brewed herbal tea,Tea
+8,Chai tea,Loose Tea
+9,Clothing,Branded
+10,Drinking Chocolate,Packaged Chocolate
+11,Drip coffee,Coffee
+12,Espresso Beans,Coffee beans
+13,Gourmet Beans,Coffee beans
+14,Gourmet brewed coffee,Coffee
+15,Green beans,Coffee beans
+16,Green tea,Loose Tea
+17,Herbal tea,Loose Tea
+18,Hot chocolate,Drinking Chocolate
+19,House blend Beans,Coffee beans
+20,Housewares,Branded
+21,Organic Beans,Coffee beans
+22,Organic Chocolate,Packaged Chocolate
+23,Organic brewed coffee,Coffee
+24,Pastry,Bakery
+25,Premium Beans,Coffee beans
+26,Premium brewed coffee,Coffee
+27,Regular syrup,Flavours
+28,Scone,Bakery
+29,Sugar free syrup,Flavours

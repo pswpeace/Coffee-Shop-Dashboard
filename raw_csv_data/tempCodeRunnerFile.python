@@ -1,0 +1,109 @@
+import pandas as pd
+import plotly.express as px
+from dash import Dash, dcc, html, Input, Output
+
+# --- 1. Load and Preprocess Data ---
+# We load the data once when the app starts
+try:
+    df = pd.read_csv('transactions.csv')
+    
+    # Convert 'transaction_date' to datetime objects
+    # 'dayfirst=True' is crucial for formats like 13/01/2023
+    df['transaction_date'] = pd.to_datetime(df['transaction_date'], dayfirst=True)
+    
+    # Extract Month, Day of Week, and Hour
+    df['month'] = df['transaction_date'].dt.month
+    df['day_name'] = df['transaction_date'].dt.day_name()
+    df['hour'] = pd.to_datetime(df['transaction_time'], format='%H:%M:%S').dt.hour
+
+except FileNotFoundError:
+    print("Error: 'transactions.csv' not found. Please ensure it is in the same folder.")
+    df = pd.DataFrame() # Create empty DF to avoid immediate crash
+
+# Define the correct order for the vertical axis (Monday to Sunday)
+days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+# --- 2. Initialize Dash App ---
+app = Dash(__name__)
+
+# --- 3. App Layout ---
+app.layout = html.Div([
+    html.H1("Coffee Shop Traffic Heatmap", style={'textAlign': 'center', 'fontFamily': 'Arial'}),
+    
+    html.Div([
+        html.P("Select a month to view the busiest times and days:", style={'fontSize': '16px'}),
+        
+        # Interactive Buttons (RadioItems)
+        dcc.RadioItems(
+            id='month-selector',
+            options=[
+                {'label': ' January (Month 1)', 'value': 1},
+                {'label': ' February (Month 2)', 'value': 2},
+                {'label': ' March (Month 3)', 'value': 3},
+                {'label': ' April (Month 4)', 'value': 4},
+                {'label': ' May (Month 5)', 'value': 5},
+                {'label': ' June (Month 6)', 'value': 6}
+            ],
+            value=1,  # Default selection
+            inline=True,  # Arrange buttons horizontally
+            style={'padding': '10px', 'fontSize': '18px'}
+        )
+    ], style={'textAlign': 'center', 'backgroundColor': '#f4f4f4', 'padding': '20px', 'borderRadius': '10px'}),
+
+    # The Graph Component
+    html.Div([
+        dcc.Graph(id='heatmap-graph')
+    ], style={'width': '90%', 'margin': '20px auto'})
+])
+
+# --- 4. Callback (Interactivity) ---
+@app.callback(
+    Output('heatmap-graph', 'figure'),
+    Input('month-selector', 'value')
+)
+def update_heatmap(selected_month):
+    # Filter the dataframe for the selected month
+    filtered_df = df[df['month'] == selected_month].copy()
+    
+    if filtered_df.empty:
+        # Handle case with no data
+        return px.imshow([[0]], title="No Data Available")
+
+    # Aggregate: Count transactions by Day and Hour
+    # This creates the "intensity" for the heatmap
+    activity_counts = filtered_df.groupby(['day_name', 'hour']).size().reset_index(name='count')
+    
+    # Pivot: Rows = Days, Columns = Hours
+    heatmap_matrix = activity_counts.pivot(index='day_name', columns='hour', values='count').fillna(0)
+    
+    # Reindex to ensure days appear in Mon-Sun order (not alphabetical)
+    heatmap_matrix = heatmap_matrix.reindex(days_order)
+    
+    # Create the Heatmap
+    fig = px.imshow(
+        heatmap_matrix,
+        labels=dict(x="Time of Day (Hour)", y="Day of Week", color="Transactions"),
+        x=heatmap_matrix.columns,
+        y=heatmap_matrix.index,
+        color_continuous_scale="Viridis",  # Colors: Viridis, Plasma, RdBu, etc.
+        aspect="auto",  # Allows the heatmap to stretch to fit the screen
+        title=f"Traffic Heatmap - Month {selected_month}"
+    )
+    
+    # Customize Layout
+    fig.update_layout(
+        xaxis=dict(
+            tickmode='linear', # Show every hour label
+            dtick=1,
+            title="Time of Day (Hour)"
+        ),
+        yaxis=dict(title="Day of Week"),
+        height=600  # Height of the graph
+    )
+    
+    return fig
+
+# --- 5. Run Server ---
+if __name__ == '__main__':
+    app.run_server(debug=True)
+    
