@@ -4,51 +4,275 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Coffee Shop Dashboard</title>
-    
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    
     <style>
-        body { background-color: #f8f9fa; }
-        .card { margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        #dashboard-container { margin-top: 30px; }
+        body { background-color: #f0f2f5; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        .card { border: none; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-radius: 8px; margin-bottom: 20px; }
+        .card-header { background: #fff; font-weight: 600; color: #444; border-bottom: 1px solid #eee; padding: 15px; }
+
+        .scrolling-wrapper { overflow-x: auto; white-space: nowrap; padding-bottom: 5px; }
+        .btn-group .btn { border-radius: 20px; margin-right: 5px; padding: 5px 15px; font-size: 0.9rem; }
+        .btn-primary.active { background-color: #2c3e50 !important; border-color: #2c3e50 !important; }
+        .btn-outline-primary { color: #2c3e50; border-color: #2c3e50; }
+        .btn-secondary.active { background-color: #27ae60 !important; border-color: #27ae60 !important; }
+        .btn-outline-secondary { color: #27ae60; border-color: #27ae60; }
+
+        .data-bar-cell { position: relative; z-index: 1; }
+        .data-bar-bg {
+            position: absolute; top: 5px; bottom: 5px; left: 0;
+            background-color: #d1e7dd; z-index: -1; border-radius: 4px;
+        }
+        .table th { font-size: 0.85rem; text-transform: uppercase; color: #888; font-weight: 600; }
+        .table td { vertical-align: middle; font-size: 0.95rem; }
     </style>
 </head>
 <body>
 
-    <nav class="navbar navbar-dark bg-dark">
+    <nav class="navbar navbar-light bg-white border-bottom mb-3">
         <div class="container-fluid">
-            <span class="navbar-brand mb-0 h1">☕ Coffee Shop Analytics</span>
+            <span class="navbar-brand h1 mb-0 ms-2">☕ Coffee Shop Dashboard</span>
+            <span class="navbar-text me-3 fw-bold text-success display-6" id="total-revenue" style="font-size: 1.2rem;">Total Rev: $0.00</span>
         </div>
     </nav>
 
-    <div class="container" id="dashboard-container">
+    <div class="container-fluid px-4">
+        <div class="scrolling-wrapper mb-3">
+            <div class="btn-group" id="shop-filters">
+                <button class="btn btn-primary active" data-val="Overall">Overall Shop</button>
+                <button class="btn btn-outline-primary" data-val="Astoria">Astoria</button>
+                <button class="btn btn-outline-primary" data-val="Lower Manhattan">Lower Manhattan</button>
+                <button class="btn btn-outline-primary" data-val="Hell's Kitchen">Hell's Kitchen</button>
+            </div>
+            <span class="mx-2 text-muted">|</span>
+            <div class="btn-group" id="month-filters">
+                <button class="btn btn-secondary active" data-val="Overall">Overall Month</button>
+                <button class="btn btn-outline-secondary" data-val="1">Jan</button>
+                <button class="btn btn-outline-secondary" data-val="2">Feb</button>
+                <button class="btn btn-outline-secondary" data-val="3">Mar</button>
+                <button class="btn btn-outline-secondary" data-val="4">Apr</button>
+                <button class="btn btn-outline-secondary" data-val="5">May</button>
+                <button class="btn btn-outline-secondary" data-val="6">Jun</button>
+            </div>
+        </div>
+
         <div class="row">
-            <div class="col-md-8">
+            <div class="col-lg-5">
+                <div class="row">
+                    <div class="col-6">
+                        <div class="card text-center">
+                            <div class="card-header pt-2 pb-2" style="font-size:0.9rem;">Sales by Location</div>
+                            <div class="card-body p-2">
+                                <div style="height: 180px; position: relative;">
+                                    <canvas id="pieSales"></canvas>
+                                </div>
+                                <h5 class="mt-2 mb-0 fw-bold" id="pie-sales-total">$0</h5>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="card text-center">
+                            <div class="card-header pt-2 pb-2" style="font-size:0.9rem;">Quantity by Location</div>
+                            <div class="card-body p-2">
+                                <div style="height: 180px; position: relative;">
+                                    <canvas id="pieQty"></canvas>
+                                </div>
+                                <h5 class="mt-2 mb-0 fw-bold" id="pie-qty-total">0</h5>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="card">
-                    <div class="card-header">Sales Overview</div>
-                    <div class="card-body">
-                        <canvas id="salesChart"></canvas>
+                    <div class="card-header pt-2 pb-2" style="font-size:0.9rem;">Daily Sales Trend (Comparison)</div>
+                    <div class="card-body p-2">
+                        <div style="height: 220px; position: relative;">
+                            <canvas id="lineChart"></canvas>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-header">Key Metrics</div>
-                    <div class="card-body">
-                        <h5 class="card-title">Total Revenue</h5>
-                        <p class="card-text display-6" id="total-revenue">$0.00</p>
-                        <hr>
-                        <h5 class="card-title">Top Product</h5>
-                        <p class="card-text text-success" id="top-product">Loading...</p>
+            <div class="col-lg-7">
+                <div class="card h-100">
+                    <div class="card-header">Product Category Performance</div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive" style="max-height: 520px; overflow-y: auto;">
+                            <table class="table table-hover mb-0" id="main-table">
+                                <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
+                                    <tr>
+                                        <th class="ps-3">Category</th>
+                                        <th class="text-end">Sales</th>
+                                        <th class="text-end">% Sales</th>
+                                        <th class="text-end">Avg Price</th>
+                                        <th class="text-end pe-3">Quantity</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </div> 
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
-    <script src="script.js"></script>
+    <script>
+        let currentShop = 'Overall';
+        let currentMonth = 'Overall';
+        let chartPieSales, chartPieQty, chartLine;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            setupFilters();
+            fetchData();
+        });
+
+        function setupFilters() {
+            const bindGroup = (id, type) => {
+                document.querySelectorAll(`#${id} button`).forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        document.querySelectorAll(`#${id} button`).forEach(b => {
+                            b.classList.remove(type === 'shop' ? 'btn-primary' : 'btn-secondary', 'active');
+                            b.classList.add(type === 'shop' ? 'btn-outline-primary' : 'btn-outline-secondary');
+                        });
+                        e.currentTarget.classList.remove(type === 'shop' ? 'btn-outline-primary' : 'btn-outline-secondary');
+                        e.currentTarget.classList.add(type === 'shop' ? 'btn-primary' : 'btn-secondary', 'active');
+
+                        if(type === 'shop') currentShop = e.currentTarget.getAttribute('data-val');
+                        else currentMonth = e.currentTarget.getAttribute('data-val');
+                        
+                        fetchData();
+                    });
+                });
+            };
+            bindGroup('shop-filters', 'shop');
+            bindGroup('month-filters', 'month');
+        }
+
+        function fetchData() {
+            const url = `/api/dashboard_data?shop=${currentShop}&month=${currentMonth}`;
+            console.log("Fetching data from:", url); // DEBUG LOG
+
+            fetch(url)
+                .then(r => r.json())
+                .then(data => {
+                    console.log("Data received:", data); // DEBUG LOG
+                    updateMetrics(data.metrics);
+                    updatePies(data.pie_data);
+                    updateLine(data.line_data);
+                    updateTable(data.table_data);
+                })
+                .catch(err => console.error("Error fetching data:", err));
+        }
+
+        function updateMetrics(m) {
+            const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+            document.getElementById('total-revenue').innerText = "Total Rev: " + fmt.format(m.total_revenue);
+        }
+
+        function updatePies(data) {
+            const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumSignificantDigits: 3 });
+            
+            // Safety check: if empty data, chart might vanish
+            if(!data.sales || data.sales.length === 0) {
+                console.warn("No pie data found!");
+                return;
+            }
+
+            // Update Sales Pie
+            chartPieSales.data.labels = data.labels;
+            chartPieSales.data.datasets[0].data = data.sales;
+            chartPieSales.update();
+            const totalS = data.sales.reduce((a,b)=>a+b, 0);
+            document.getElementById('pie-sales-total').innerText = fmt.format(totalS);
+
+            // Update Qty Pie
+            chartPieQty.data.labels = data.labels;
+            chartPieQty.data.datasets[0].data = data.qty;
+            chartPieQty.update();
+            const totalQ = data.qty.reduce((a,b)=>a+b, 0);
+            document.getElementById('pie-qty-total').innerText = totalQ.toLocaleString() + " Units";
+        }
+
+        function updateLine(data) {
+            chartLine.data.labels = data.dates;
+            chartLine.data.datasets = data.datasets.map(ds => ({
+                ...ds,
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.3,
+                fill: false
+            }));
+            chartLine.update();
+        }
+
+        function updateTable(rows) {
+            const tbody = document.querySelector('#main-table tbody');
+            tbody.innerHTML = '';
+            const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+
+            rows.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="ps-3 fw-bold text-secondary">${row.category}</td>
+                    <td class="text-end data-bar-cell">
+                        <div class="data-bar-bg" style="width: ${row.percent_sales}%; background-color: #d1e7dd;"></div>
+                        <span class="position-relative">${fmt.format(row.sales)}</span>
+                    </td>
+                    <td class="text-end text-muted small">${row.percent_sales.toFixed(1)}%</td>
+                    <td class="text-end">${fmt.format(row.avg_price)}</td>
+                    <td class="text-end pe-3 data-bar-cell">
+                         <div class="data-bar-bg" style="width: ${row.percent_qty}%; background-color: #e2e3e5;"></div>
+                         <span class="position-relative">${row.qty.toLocaleString()}</span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function initCharts() {
+            const pieOpts = {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: { legend: { display: false } }
+            };
+
+            const colors = ['#2c3e50', '#e67e22', '#27ae60'];
+
+            const ctxSales = document.getElementById('pieSales').getContext('2d');
+            chartPieSales = new Chart(ctxSales, {
+                type: 'doughnut',
+                data: { labels: [], datasets: [{ data: [], backgroundColor: colors, borderWidth:0 }] },
+                options: pieOpts
+            });
+
+            const ctxQty = document.getElementById('pieQty').getContext('2d');
+            chartPieQty = new Chart(ctxQty, {
+                type: 'doughnut',
+                data: { labels: [], datasets: [{ data: [], backgroundColor: colors, borderWidth:0 }] },
+                options: pieOpts
+            });
+
+            const ctxLine = document.getElementById('lineChart').getContext('2d');
+            chartLine = new Chart(ctxLine, {
+                type: 'line',
+                data: { labels: [], datasets: [] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { legend: { position: 'top', labels: {boxWidth: 10} } },
+                    scales: { 
+                        x: { grid: {display: false} },
+                        y: { beginAtZero: true, grid: {borderDash: [5,5]} } 
+                    }
+                }
+            });
+        }
+    </script>
 </body>
 </html>
