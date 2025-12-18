@@ -32,21 +32,23 @@
         .shop-specific-mode .pie-wrapper { display: none; }
         .shop-specific-mode .heatmap-wrapper { display: block; }
 
-        .heatmap-legend {
-            font-size: 0.7rem;
+        /* Custom Heatmap Legend */
+        .heatmap-legend-container {
             display: flex;
-            justify-content: center;
             align-items: center;
-            margin-top: 5px;
+            justify-content: center;
             margin-bottom: 10px;
+            font-size: 0.8rem;
+            color: #555;
         }
-        .legend-item { margin: 0 5px; }
-        .legend-color {
-            display: inline-block;
-            width: 15px;
-            height: 10px;
-            margin-right: 3px;
-            border-radius: 2px;
+        .heatmap-gradient {
+            width: 200px;
+            height: 12px;
+            /* Light Blue (#D0E1F9) to Dark Blue (#1E3A8A) */
+            background: linear-gradient(to right, #D0E1F9, #1E3A8A);
+            border-radius: 6px;
+            margin: 0 10px;
+            border: 1px solid #ddd;
         }
     </style>
 </head>
@@ -111,10 +113,14 @@
                     <div class="col-12">
                         <div class="card">
                             <div class="card-header d-flex justify-content-between align-items-center pt-2 pb-2" style="font-size:0.9rem;">
-                                <span>Transaction Volume Matrix (<span id="heatmap-shop-name"></span>)</span>
-                                </div>
+                                <span>Hourly Traffic Intensity (<span id="heatmap-shop-name"></span>)</span>
+                            </div>
                             <div class="card-body p-2">
-                                <div class="heatmap-legend" id="heatmap-legend-container"></div>
+                                <div class="heatmap-legend-container">
+                                    <span>Low</span>
+                                    <div class="heatmap-gradient"></div>
+                                    <span>High</span>
+                                </div>
                                 <div style="height: 380px; position: relative;">
                                     <canvas id="singleHeatmap"></canvas>
                                 </div>
@@ -122,6 +128,7 @@
                         </div>
                     </div>
                 </div>
+
                 <div class="card">
                     <div class="card-header pt-2 pb-2" style="font-size:0.9rem;">Daily Sales Trend</div>
                     <div class="card-body p-2">
@@ -168,15 +175,13 @@
     <script>
         let currentShop = 'Overall';
         let currentMonth = 'Overall';
-        // Removed heatmapMode and heatmapRawData since it's now a fixed view
         
         let chartPieSales, chartPieQty, chartLineSales, chartLineQty; 
-        let chartHeatmap; // SINGLE heatmap chart instance (for transaction volume)
+        let chartHeatmap;
 
         document.addEventListener('DOMContentLoaded', () => {
             initCharts();
             setupFilters();
-            // Removed setupHeatmapToggle()
             fetchData();
         });
 
@@ -221,7 +226,7 @@
                     if(currentShop === 'Overall') {
                         updatePies(data.pie_data);
                     } else {
-                        updateHeatmap(data.heatmap_data); // Call fixed heatmap update
+                        updateHeatmap(data.heatmap_data); 
                     }
                     updateLines(data.line_data); 
                     updateTable(data.table_data);
@@ -238,11 +243,9 @@
             const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumSignificantDigits: 3 });
             
             if(!data.sales || data.sales.length === 0) {
-                console.warn("No pie data found!");
                 return;
             }
 
-            // Update Sales Pie
             if(chartPieSales) {
                 chartPieSales.data.labels = data.labels;
                 chartPieSales.data.datasets[0].data = data.sales;
@@ -251,7 +254,6 @@
                 document.getElementById('pie-sales-total').innerText = fmt.format(totalS);
             }
 
-            // Update Qty Pie
             if(chartPieQty) {
                 chartPieQty.data.labels = data.labels;
                 chartPieQty.data.datasets[0].data = data.qty;
@@ -261,106 +263,83 @@
             }
         }
         
-        // --- FIXED: Function to update the SINGLE Heatmap for Transactions ---
+        // --- UPDATED HEATMAP FUNCTION (Continuous Gradient) ---
         function updateHeatmap(data) {
-            if (!chartHeatmap || !data) {
-                console.error("Heatmap data is missing or chart is not initialized.");
-                return;
-            }
-            
-            // Map: 0=Sun, 1=Mon, ..., 6=Sat (SQLITE strftime('%w'))
-            // Order of datasets (Y-axis rows) based on chart options: Mon -> Sun
-            const displayDayLabels = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-            const sqliteDayIndexMap = { 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 0 }; 
-            
-            // Operating Hours: 6 AM to 8 PM (20h) -> 15 hours total
-            const hourLabels = Array.from({length: 15}, (_, i) => `${i + 6}`); // 6 to 20
-            
+            if (!chartHeatmap || !data) return;
+
             document.getElementById('heatmap-shop-name').innerText = currentShop;
             
             const matrix = data.transaction_matrix;
-            const maxVal = data.max_transactions;
-            const title = 'Transactions';
+            const maxVal = data.max_transactions > 0 ? data.max_transactions : 1; // Avoid division by zero
+            
+            const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+            const sqliteDayMap = {'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 0};
+            
+            // Hours 6 to 20
+            const hours = Array.from({length: 15}, (_, i) => i + 6); 
 
-            // Custom color scale (Dark Blue/Purple to Yellow/Light Green)
-            // Using a Viridis-like scale for contrast.
-            const colorsScale = [
-                '#440154', '#482777', '#3e4989', '#31688e', '#26828e', 
-                '#35b779', '#90d743', '#fde725'
-            ]; 
-
-            // Helper function to get color based on value and max
-            function getColor(value, max, colors) {
-                if (value === 0) return 'rgba(240, 240, 240, 1)'; // Off-white/Lightest for zero
+            // Interpolate color function (Light Blue to Dark Blue)
+            function getColor(value, max) {
+                if (value === 0) return '#f8f9fa'; // Very light gray for empty
                 
-                // Normalize value using logarithmic scale for better low-end distinction
-                const logMax = Math.log(max + 1);
-                const logValue = Math.log(value + 1);
-                const ratio = logMax > 0 ? logValue / logMax : 0;
+                const ratio = value / max;
                 
-                // Map ratio to index (0 = Low, colors.length - 1 = High)
-                const index = Math.min(Math.floor(ratio * (colors.length - 1)), colors.length - 1);
-                return colors[index]; 
+                // Start Color (Light Blue): rgb(208, 225, 249) -> #D0E1F9
+                // End Color (Dark Blue): rgb(30, 58, 138) -> #1E3A8A
+                
+                const startR = 208, startG = 225, startB = 249;
+                const endR = 30, endG = 58, endB = 138;
+                
+                const r = Math.round(startR + (endR - startR) * ratio);
+                const g = Math.round(startG + (endG - startG) * ratio);
+                const b = Math.round(startB + (endB - startB) * ratio);
+                
+                return `rgba(${r}, ${g}, ${b}, 0.9)`;
             }
 
-            // --- HEATMAP DATA PREPARATION (One dataset per Day, one fixed bar per hour) ---
-            const datasets = [];
-            
-            // Loop through each DAY of the week in display order (Mon-Sun)
-            displayDayLabels.forEach((dayName) => {
-                const sqliteDayIndex = sqliteDayIndexMap[dayName];
+            const datasets = hours.map(hour => {
+                const bgColors = [];
+                const actualValues = [];
 
-                // Add 15 separate datasets for each hour of the day
-                hourLabels.forEach((hour, hourIndex) => {
-                    const hourVal = parseInt(hour, 10);
-                    const key = `${sqliteDayIndex}:${hourVal}`; 
-                    const value = matrix[key] || 0;
-                    const color = getColor(value, maxVal, colorsScale);
+                days.forEach(dayName => {
+                    const dIndex = sqliteDayMap[dayName];
+                    const key = `${dIndex}:${hour}`;
+                    const val = matrix[key] || 0;
                     
-                    datasets.push({
-                        label: `${dayName} - ${hour}`, 
-                        data: [{ x: 1, y: dayName, transactionVolume: value }], // Fixed X-value of 1
-                        backgroundColor: color,
-                        // Crucial for filling the cell space:
-                        barPercentage: 6.0, 
-                        categoryPercentage: 1.0,
-                        borderColor: 'rgba(255, 255, 255, 0.5)', 
-                        borderWidth: 1, // Add border to define cells
-                        stack: dayName, // Stack all 15 bars for this day onto a single Y-category slot
-                        hidden: false 
-                    });
+                    bgColors.push(getColor(val, maxVal));
+                    actualValues.push(val);
                 });
+
+                return {
+                    label: `${hour}:00`,
+                    data: days.map(() => 1), 
+                    realValues: actualValues, 
+                    backgroundColor: bgColors,
+                    borderWidth: 1,
+                    borderColor: '#fff',
+                    barPercentage: 1.0,      
+                    categoryPercentage: 1.0 
+                };
             });
 
-            // --- UPDATE CHART ---
-            chartHeatmap.data.labels = displayDayLabels; // These are the Y-axis labels
+            chartHeatmap.data.labels = days;
             chartHeatmap.data.datasets = datasets;
             
-            // Re-order the Y-axis labels to match the provided image (Mon at top, Sun at bottom)
-            chartHeatmap.options.scales.y.labels = displayDayLabels.slice().reverse();
+            // Tooltip Update
+            chartHeatmap.options.plugins.tooltip.callbacks = {
+                title: (items) => {
+                    const item = items[0];
+                    return `${item.label} @ ${item.dataset.label}`; 
+                },
+                label: (context) => {
+                    const realVal = context.dataset.realValues[context.dataIndex];
+                    return `Transactions: ${realVal}`;
+                }
+            };
 
-            // Update tooltip callbacks to pull information from the correct dataset/stack
-            chartHeatmap.options.plugins.tooltip.callbacks.title = (items) => {
-                const rawLabel = items[0].dataset.label; // e.g., "Monday - 10"
-                const parts = rawLabel.split(' - ');
-                return `${parts[0]}, ${parts[1]}:00`;
-            };
-            chartHeatmap.options.plugins.tooltip.callbacks.label = (context) => {
-                const value = context.dataset.data[0].transactionVolume; 
-                return `${title}: ${value.toLocaleString()}`;
-            };
-            
             chartHeatmap.update();
-
-            // --- UPDATE LEGEND ---
-            const legendEl = document.getElementById('heatmap-legend-container');
-            
-            legendEl.innerHTML = `${title} (Max: ${maxVal.toLocaleString()}) ` + 
-                `<span class="legend-item"><span class="legend-color" style="background-color:${colorsScale[0]};"></span> Low</span>` + 
-                `<span class="legend-item"><span class="legend-color" style="background-color:${colorsScale[colorsScale.length - 1]};"></span> High</span>`;
         }
-        
-        // Function to update both line charts (No Change)
+
         function updateLines(data) {
             const chartOptions = (ds) => ({
                 ...ds,
@@ -425,55 +404,39 @@
                     y: { beginAtZero: true, grid: {borderDash: [5,5]} } 
                 }
             };
-            
-            // Heatmap Options: Horizontal Bar Chart simulating heatmap
+
+            // Heatmap Config
             const heatmapOpts = {
                 responsive: true,
                 maintainAspectRatio: false,
-                indexAxis: 'y', // Day of Week on Y-axis
-                plugins: {
-                    legend: { display: false }, 
-                    tooltip: { 
-                        callbacks: {
-                            // Callbacks updated in updateHeatmap
-                        }
-                    }
-                },
-                scales: { 
+                indexAxis: 'y', 
+                scales: {
                     x: { 
-                        // The actual value scale (hidden)
                         stacked: true, 
-                        display: false, 
-                        suggestedMax: 15, // Max number of hours (6 to 20)
+                        display: true, 
+                        position: 'top',
                         grid: { display: false },
-                    },
-                    y: { 
-                        // Day of Week categorical scale
-                        stacked: true, 
-                        type: 'category', 
-                        labels: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].reverse(), 
-                        position: 'left',
-                        title: { display: true, text: 'Day of Week' },
-                        grid: { display: false },
-                        ticks: { autoSkip: false },
-                        // FIX: Removed 'offset: true' to eliminate padding around the categorical groups
-                    },
-                    timeAxis: { // Custom axis for Time of Day (Hour) labels
-                        position: 'bottom',
-                        labels: Array.from({length: 15}, (_, i) => `${i + 6}`), // 6 to 20
-                        grid: { display: false },
-                        title: { display: true, text: 'Time of Day (Hour)' },
                         ticks: {
-                            minRotation: 0, maxRotation: 0,
+                            callback: function(val, index) {
+                                return (index + 6) + ":00";
+                            },
                             font: { size: 10 }
                         }
-                    } 
+                    },
+                    y: { 
+                        stacked: true, 
+                        grid: { display: false },
+                        reverse: true 
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { displayColors: false }
                 }
             };
 
             const pieColors = ['#2c3e50', '#e67e22', '#27ae60'];
             
-            // --- PIE CHARTS (Overall Mode) ---
             const ctxSales = document.getElementById('pieSales').getContext('2d');
             chartPieSales = new Chart(ctxSales, {
                 type: 'doughnut',
@@ -488,7 +451,6 @@
                 options: pieOpts
             });
             
-            // --- SINGLE HEATMAP CHART (Shop Specific Mode) ---
             const ctxHeatmap = document.getElementById('singleHeatmap').getContext('2d');
             chartHeatmap = new Chart(ctxHeatmap, {
                 type: 'bar',
@@ -496,7 +458,6 @@
                 options: heatmapOpts
             });
             
-            // --- LINE CHARTS ---
             const ctxLineSales = document.getElementById('lineChartSales').getContext('2d');
             chartLineSales = new Chart(ctxLineSales, {
                 type: 'line',
