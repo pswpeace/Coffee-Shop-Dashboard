@@ -23,32 +23,36 @@
             position: absolute; top: 5px; bottom: 5px; left: 0;
             background-color: #d1e7dd; z-index: -1; border-radius: 4px;
         }
+        /* Specific colors for Child bars to differentiate */
+        .child-row .data-bar-bg-sales { background-color: #cfe2ff !important; }
+        .child-row .data-bar-bg-qty { background-color: #e9ecef !important; }
+        
         .table th { font-size: 0.85rem; text-transform: uppercase; color: #888; font-weight: 600; }
         .table td { vertical-align: middle; font-size: 0.95rem; }
 
-        /* Styles for the single heatmap container */
+        /* Accordion Styles */
+        .cursor-pointer { cursor: pointer; }
+        .toggle-icon { transition: transform 0.2s; display: inline-block; font-size: 0.8rem; margin-right: 6px; color: #999; }
+        .expanded .toggle-icon { transform: rotate(90deg); color: #444; }
+        
+        /* Child Row Styles */
+        .child-row { background-color: #f8f9fa; display: none; }
+        .child-row td:first-child { padding-left: 2rem !important; font-size: 0.9rem; color: #555; }
+        .child-row.show { display: table-row; }
+
         .heatmap-wrapper { display: none; }
         .pie-wrapper { display: flex; }
         .shop-specific-mode .pie-wrapper { display: none; }
         .shop-specific-mode .heatmap-wrapper { display: block; }
 
-        /* Custom Heatmap Legend */
         .heatmap-legend-container {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 10px;
-            font-size: 0.8rem;
-            color: #555;
+            display: flex; align-items: center; justify-content: center;
+            margin-bottom: 10px; font-size: 0.8rem; color: #555;
         }
         .heatmap-gradient {
-            width: 200px;
-            height: 12px;
-            /* Light Blue (#D0E1F9) to Dark Blue (#1E3A8A) */
+            width: 200px; height: 12px;
             background: linear-gradient(to right, #D0E1F9, #1E3A8A);
-            border-radius: 6px;
-            margin: 0 10px;
-            border: 1px solid #ddd;
+            border-radius: 6px; margin: 0 10px; border: 1px solid #ddd;
         }
     </style>
 </head>
@@ -149,12 +153,13 @@
 
             <div class="col-lg-7">
                 <div class="card h-100">
-                    <div class="card-header">Product Category Performance</div>
+                    <div class="card-header">Product Category & Item Performance</div>
                     <div class="card-body p-0">
-                        <div class="table-responsive" style="max-height: 900px; overflow-y: auto;"> <table class="table table-hover mb-0" id="main-table">
+                        <div class="table-responsive" style="max-height: 900px; overflow-y: auto;"> 
+                            <table class="table table-hover mb-0" id="main-table">
                                 <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
                                     <tr>
-                                        <th class="ps-3">Category</th>
+                                        <th class="ps-3">Category / Product</th>
                                         <th class="text-end">Sales</th>
                                         <th class="text-end">% Sales</th>
                                         <th class="text-end">Avg Price</th>
@@ -217,8 +222,7 @@
 
         function fetchData() {
             const url = `/api/dashboard_data?shop=${currentShop}&month=${currentMonth}`;
-            console.log("Fetching data from:", url);
-
+            
             fetch(url)
                 .then(r => r.json())
                 .then(data => {
@@ -241,10 +245,7 @@
 
         function updatePies(data) {
             const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumSignificantDigits: 3 });
-            
-            if(!data.sales || data.sales.length === 0) {
-                return;
-            }
+            if(!data.sales || data.sales.length === 0) return;
 
             if(chartPieSales) {
                 chartPieSales.data.labels = data.labels;
@@ -263,98 +264,64 @@
             }
         }
         
-        // --- UPDATED HEATMAP FUNCTION (Continuous Gradient) ---
         function updateHeatmap(data) {
             if (!chartHeatmap || !data) return;
 
             document.getElementById('heatmap-shop-name').innerText = currentShop;
-            
             const matrix = data.transaction_matrix;
-            const maxVal = data.max_transactions > 0 ? data.max_transactions : 1; // Avoid division by zero
+            const maxVal = data.max_transactions > 0 ? data.max_transactions : 1; 
             
             const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
             const sqliteDayMap = {'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 0};
-            
-            // Hours 6 to 20
             const hours = Array.from({length: 15}, (_, i) => i + 6); 
 
-            // Interpolate color function (Light Blue to Dark Blue)
             function getColor(value, max) {
-                if (value === 0) return '#f8f9fa'; // Very light gray for empty
-                
+                if (value === 0) return '#f8f9fa';
                 const ratio = value / max;
-                
-                // Start Color (Light Blue): rgb(208, 225, 249) -> #D0E1F9
-                // End Color (Dark Blue): rgb(30, 58, 138) -> #1E3A8A
-                
                 const startR = 208, startG = 225, startB = 249;
                 const endR = 30, endG = 58, endB = 138;
-                
                 const r = Math.round(startR + (endR - startR) * ratio);
                 const g = Math.round(startG + (endG - startG) * ratio);
                 const b = Math.round(startB + (endB - startB) * ratio);
-                
                 return `rgba(${r}, ${g}, ${b}, 0.9)`;
             }
 
             const datasets = hours.map(hour => {
                 const bgColors = [];
                 const actualValues = [];
-
                 days.forEach(dayName => {
                     const dIndex = sqliteDayMap[dayName];
                     const key = `${dIndex}:${hour}`;
                     const val = matrix[key] || 0;
-                    
                     bgColors.push(getColor(val, maxVal));
                     actualValues.push(val);
                 });
-
                 return {
                     label: `${hour}:00`,
                     data: days.map(() => 1), 
                     realValues: actualValues, 
                     backgroundColor: bgColors,
-                    borderWidth: 1,
-                    borderColor: '#fff',
-                    barPercentage: 1.0,      
-                    categoryPercentage: 1.0 
+                    borderWidth: 1, borderColor: '#fff',
+                    barPercentage: 1.0, categoryPercentage: 1.0 
                 };
             });
 
             chartHeatmap.data.labels = days;
             chartHeatmap.data.datasets = datasets;
-            
-            // Tooltip Update
             chartHeatmap.options.plugins.tooltip.callbacks = {
-                title: (items) => {
-                    const item = items[0];
-                    return `${item.label} @ ${item.dataset.label}`; 
-                },
-                label: (context) => {
-                    const realVal = context.dataset.realValues[context.dataIndex];
-                    return `Transactions: ${realVal}`;
-                }
+                title: (items) => `${items[0].label} @ ${items[0].dataset.label}`,
+                label: (context) => `Transactions: ${context.dataset.realValues[context.dataIndex]}`
             };
-
             chartHeatmap.update();
         }
 
         function updateLines(data) {
-            const chartOptions = (ds) => ({
-                ...ds,
-                borderWidth: 2,
-                pointRadius: 0,
-                tension: 0.3,
-                fill: false
-            });
-
+            const chartOptions = (ds) => ({ ...ds, borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false });
             if(chartLineSales) {
                 chartLineSales.data.labels = data.dates;
                 chartLineSales.data.datasets = data.sales_datasets.map(chartOptions);
                 chartLineSales.update();
             }
-
             if(chartLineQty) {
                 chartLineQty.data.labels = data.dates;
                 chartLineQty.data.datasets = data.qty_datasets.map(chartOptions);
@@ -367,12 +334,22 @@
             tbody.innerHTML = '';
             const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
-            rows.forEach(row => {
+            rows.forEach((row, index) => {
+                // Parent Row (Category)
                 const tr = document.createElement('tr');
+                tr.classList.add('cursor-pointer');
+                tr.onclick = function() {
+                    this.classList.toggle('expanded');
+                    const children = document.querySelectorAll(`.child-of-${index}`);
+                    children.forEach(c => c.classList.toggle('show'));
+                };
+
                 tr.innerHTML = `
-                    <td class="ps-3 fw-bold text-secondary">${row.category}</td>
+                    <td class="ps-3 fw-bold text-secondary">
+                        <span class="toggle-icon">▶</span> ${row.category}
+                    </td>
                     <td class="text-end data-bar-cell">
-                        <div class="data-bar-bg" style="width: ${row.percent_sales}%; background-color: #d1e7dd;"></div>
+                        <div class="data-bar-bg" style="width: ${row.percent_sales}%;"></div>
                         <span class="position-relative">${fmt.format(row.sales)}</span>
                     </td>
                     <td class="text-end text-muted small">${row.percent_sales.toFixed(1)}%</td>
@@ -383,94 +360,66 @@
                     </td>
                 `;
                 tbody.appendChild(tr);
+
+                // Child Rows (Products)
+                if (row.products && row.products.length > 0) {
+                    row.products.forEach(p => {
+                        const childTr = document.createElement('tr');
+                        childTr.classList.add('child-row', `child-of-${index}`);
+                        
+                        childTr.innerHTML = `
+                            <td>${p.name}</td>
+                            <td class="text-end data-bar-cell">
+                                <div class="data-bar-bg data-bar-bg-sales" style="width: ${p.percent_sales}%;"></div>
+                                <span class="position-relative small">${fmt.format(p.sales)}</span>
+                            </td>
+                            <td class="text-end text-muted small" style="font-size:0.8rem;">${p.percent_sales.toFixed(1)}%</td>
+                            <td class="text-end small">${fmt.format(p.avg_price)}</td>
+                            <td class="text-end pe-3 data-bar-cell">
+                                <div class="data-bar-bg data-bar-bg-qty" style="width: ${p.percent_qty}%;"></div>
+                                <span class="position-relative small">${p.qty.toLocaleString()}</span>
+                            </td>
+                        `;
+                        tbody.appendChild(childTr);
+                    });
+                }
             });
         }
 
         function initCharts() {
-            const pieOpts = {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '65%',
-                plugins: { legend: { display: false } }
-            };
-            
+            const pieOpts = { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: false } } };
             const lineOpts = {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: { mode: 'index', intersect: false },
+                responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
                 plugins: { legend: { position: 'top', labels: {boxWidth: 10} } },
-                scales: { 
-                    x: { grid: {display: false} },
-                    y: { beginAtZero: true, grid: {borderDash: [5,5]} } 
-                }
+                scales: { x: { grid: {display: false} }, y: { beginAtZero: true, grid: {borderDash: [5,5]} } }
             };
-
-            // Heatmap Config
             const heatmapOpts = {
-                responsive: true,
-                maintainAspectRatio: false,
-                indexAxis: 'y', 
+                responsive: true, maintainAspectRatio: false, indexAxis: 'y', 
                 scales: {
-                    x: { 
-                        stacked: true, 
-                        display: true, 
-                        position: 'top',
-                        grid: { display: false },
-                        ticks: {
-                            callback: function(val, index) {
-                                return (index + 6) + ":00";
-                            },
-                            font: { size: 10 }
-                        }
+                    x: { stacked: true, display: true, position: 'top', grid: { display: false },
+                        ticks: { callback: (val, index) => (index + 6) + ":00", font: { size: 10 } }
                     },
-                    y: { 
-                        stacked: true, 
-                        grid: { display: false },
-                        reverse: true 
-                    }
+                    y: { stacked: true, grid: { display: false }, reverse: true }
                 },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: { displayColors: false }
-                }
+                plugins: { legend: { display: false }, tooltip: { displayColors: false } }
             };
 
             const pieColors = ['#2c3e50', '#e67e22', '#27ae60'];
             
             const ctxSales = document.getElementById('pieSales').getContext('2d');
-            chartPieSales = new Chart(ctxSales, {
-                type: 'doughnut',
-                data: { labels: [], datasets: [{ data: [], backgroundColor: pieColors, borderWidth:0 }] },
-                options: pieOpts
-            });
+            chartPieSales = new Chart(ctxSales, { type: 'doughnut', data: { labels: [], datasets: [{ data: [], backgroundColor: pieColors, borderWidth:0 }] }, options: pieOpts });
 
             const ctxQty = document.getElementById('pieQty').getContext('2d');
-            chartPieQty = new Chart(ctxQty, {
-                type: 'doughnut',
-                data: { labels: [], datasets: [{ data: [], backgroundColor: pieColors, borderWidth:0 }] },
-                options: pieOpts
-            });
+            chartPieQty = new Chart(ctxQty, { type: 'doughnut', data: { labels: [], datasets: [{ data: [], backgroundColor: pieColors, borderWidth:0 }] }, options: pieOpts });
             
             const ctxHeatmap = document.getElementById('singleHeatmap').getContext('2d');
-            chartHeatmap = new Chart(ctxHeatmap, {
-                type: 'bar',
-                data: { labels: [], datasets: [] },
-                options: heatmapOpts
-            });
+            chartHeatmap = new Chart(ctxHeatmap, { type: 'bar', data: { labels: [], datasets: [] }, options: heatmapOpts });
             
             const ctxLineSales = document.getElementById('lineChartSales').getContext('2d');
-            chartLineSales = new Chart(ctxLineSales, {
-                type: 'line',
-                data: { labels: [], datasets: [] },
-                options: lineOpts
-            });
+            chartLineSales = new Chart(ctxLineSales, { type: 'line', data: { labels: [], datasets: [] }, options: lineOpts });
             
             const ctxLineQty = document.getElementById('lineChartQty').getContext('2d');
-            chartLineQty = new Chart(ctxLineQty, {
-                type: 'line',
-                data: { labels: [], datasets: [] },
-                options: lineOpts
-            });
+            chartLineQty = new Chart(ctxLineQty, { type: 'line', data: { labels: [], datasets: [] }, options: lineOpts });
         }
     </script>
 </body>
